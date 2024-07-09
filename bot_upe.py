@@ -11,12 +11,15 @@ Original file is located at
 
 !pip install Selenium
 !pip install webdriver_manager
+!pip install unidecode
 import requests
+import time
 from bs4 import BeautifulSoup
 import time
 import os
 import pickle
 import requests
+import re
 from bs4 import BeautifulSoup
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -27,9 +30,14 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
+from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from datetime import datetime
+from unidecode import unidecode
 
 def download_file(url, local_filename):
-    with requests.get(url, stream=True) as r:     #Isso é coisa da biblioteca para fazer download... Tou aprendendo ainda, mas tem doc!
+    with requests.get(url, stream=True) as r:
         r.raise_for_status()
         with open(local_filename, 'wb') as f:
             for chunk in r.iter_content(chunk_size=8192):
@@ -39,103 +47,212 @@ def download_file(url, local_filename):
 def file_exists_locally(filepath):
     return os.path.exists(filepath)
 
-def scrape_site_1(url, download_folder):
+def extract_publication_date(parent_div):
+    if parent_div:
+        text = parent_div.get_text(separator=" ").strip()
+        start = text.find('Publicação:')
+        if start != -1:
+            date_text = text[start + len('Publicação:'):].strip()
+            return date_text
+    return None
+
+def sanitize_folder_name(name):
+    name = name.replace('/', '-')
+    name = re.sub(r'[^\w\s-]', '', name)
+    name = re.sub(r'\s+', ' ', name)
+    name = name.strip()
+    return name
+
+def scrape_site(url, download_folder):
     try:
-        response = requests.get(url, timeout=60)   #Tenta conectar no servidor, se passar x tempo segundos e não conectar ele encerra e vai para a próxima!
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        links = soup.find_all('a', class_='wpfd_downloadlink', href=True) #Tenta encontrar todos os links de download com a classe 'wpfd_downloadlink'
+        edital_conteudos = soup.find_all('div', class_='edital-conteudo')
+        previous_folder = None
 
-        for link in links:
-            href = link['href']
+        for index, edital in enumerate(edital_conteudos):
+            title_link = edital.find('a', href=True)
+            if title_link and title_link['href'].endswith('.pdf'):
+                post_title = title_link.get_text(strip=True)
+                publication_date = extract_publication_date(edital)
+                if publication_date:
+                    pdf_filename = title_link['href'].split('/')[-1]
+                    pdf_name = os.path.splitext(pdf_filename)[0]
+                    pdf_name = pdf_name.replace('-', ' ')
+                    sanitized_title = sanitize_folder_name(pdf_name)
+                    sanitized_date = publication_date.replace('/', '-')
+                    folder_name = f"{sanitized_title} - {sanitized_date}"
 
-            if href.endswith('.pdf'):
-                filename = href.split('/')[-1]
-                local_path = os.path.join(download_folder, filename)
+                    if previous_folder:
+                        adendo_check = edital.find_previous_sibling('div', class_='edital-conteudo').find('span', style="font-size: 82%")
+                        if adendo_check:
+                            local_folder = os.path.join(previous_folder, folder_name)
+                        else:
+                            local_folder = os.path.join(download_folder, folder_name)
+                            previous_folder = local_folder
+                    else:
+                        local_folder = os.path.join(download_folder, folder_name)
+                        previous_folder = local_folder
 
-                if not file_exists_locally(local_path):     # verifica se tem ou não tem o arquivo no drive já
-                    download_file(href, local_path)
-                    print(f"Downloaded {local_path}")
+                    os.makedirs(local_folder, exist_ok=True)
 
+                    local_path = os.path.join(local_folder, pdf_filename)
+
+                    if not file_exists_locally(local_path):
+                        download_file(title_link['href'], local_path)
+                        print(f"Downloaded {local_path}")
+                    else:
+                        print(f"File {pdf_filename} already exists locally")
                 else:
-                    print(f"File {filename} already exists locally")
+                    print(f"Could not extract publication date for {post_title}")
+                    print(f"Parent div content: {edital}")
+
+            if index < len(edital_conteudos) - 1:
+                next_edital = edital_conteudos[index + 1]
+                adendo_span = next_edital.find('span', style="font-size: 82%")
+                if adendo_span and previous_folder:
+                    continue
+                else:
+                    previous_folder = None
 
     except requests.exceptions.RequestException as e:
         print(f"Error fetching {url}: {e}")
 
-def scrape_site_2(url, download_folder):
-    try:
-        response = requests.get(url, timeout=10)  #Tenta conectar no servidor, se passar x tempo segundos e não conectar ele encerra e vai para a próxima!
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
-
-        links = soup.find_all('span', class_='avia_iconbox_title')  #Tenta encontrar todos os links que contêm a classe 'avia_iconbox_title'
-
-        for link in links:
-            parent = link.find_parent('a', href=True)
-
-            if parent:
-                href = parent['href']
-
-                if href.endswith('.pdf'):
-                    filename = href.split('/')[-1]
-                    local_path = os.path.join(download_folder, filename)
-
-                    if not file_exists_locally(local_path):     # verifica se tem ou não tem o arquivo no drive já
-                        download_file(href, local_path)
-                        print(f"Downloaded {local_path}")
-
-                    else:
-                        print(f"File {filename} already exists locally")
-
-    except requests.exceptions.RequestException as e:
-
-        print(f"Error fetching {url}: {e}")
-
-def scrape_site_3(url, download_folder):
-    try:
-        response = requests.get(url, timeout=60) #Tenta conectar no servidor, se passar x tempo segundos e não conectar ele encerra e vai para a próxima!
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
-
-        links = soup.find_all('a', href=True)  #Tenta encontrar todos os links que contêm um href e têm um span com o texto "Chamada"
-
-        for link in links:
-            if link.find('span') and 'Chamada' in link.text:
-                href = link['href']
-
-                if href.endswith('.pdf'):
-                    filename = href.split('/')[-1]
-                    local_path = os.path.join(download_folder, filename)
-
-                    if not file_exists_locally(local_path):     # verifica se tem ou não tem o arquivo no drive já
-                        download_file(href, local_path)
-                        print(f"Downloaded {local_path}")
-
-                    else:
-                        print(f"File {filename} already exists locally")
-
-    except requests.exceptions.RequestException as e:
-
-        print(f"Error fetching {url}: {e}")
-
-def monitor_sites(folders):    #Isso aqui é para ficar verificando quando a gente deixar rodando, pode arrancar fora se a gente não for deixar essa aplicação rodando full num server!
+def monitor_sites(folders):
     while True:
         for url, folder_name, scraper_function in folders:
             download_folder = os.path.join(base_download_folder, folder_name)
             os.makedirs(download_folder, exist_ok=True)
             scraper_function(url, download_folder)
-        time.sleep(300) # <--- Esperar x tempo antes de verificar novamente
+        time.sleep(300)
 
-#variáveis contendo os sites = Input!!!
 site_scrapers = [
-    ('https://www.secti.pe.gov.br/editais/', 'secti', scrape_site_1),
-    ('https://www.facepe.br/editais/todos/?c=todos', 'facepe', scrape_site_2),
-    ('http://memoria2.cnpq.br/web/guest/chamadas-publicas', 'cnpq', scrape_site_3)
+    ('https://www.facepe.br/editais/todos/?c=todos', 'facepe', scrape_site)
 ]
 
-base_download_folder = '/content/drive/MyDrive/Engenharia de Software'  #Pasta onde os arquivos serão salvos -- Inicialmente, depois a gente joga para um banco!!!
+base_download_folder = '/content/drive/MyDrive/Engenharia de Software'
 os.makedirs(base_download_folder, exist_ok=True)
 
-monitor_sites(site_scrapers) #Mostra o que ta rolando nas conexões!
+monitor_sites(site_scrapers)
+
+def download_file(url, local_filename):
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()
+        with open(local_filename, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+    return local_filename
+
+def file_exists_locally(filepath):
+    return os.path.exists(filepath)
+
+def extract_publication_date(soup):
+    date_td = soup.find('td', string=lambda text: text and '/' in text)
+    if date_td:
+        return date_td.get_text(strip=True)
+    return None
+
+def extract_pdf_links(soup):
+    pdf_links = []
+    pdf_elements = soup.find_all('a', href=True)
+    for element in pdf_elements:
+        if element['href'].endswith('.pdf'):
+            pdf_links.append(element['href'])
+    return pdf_links
+
+def sanitize_folder_name(name):
+    name = name.replace('/', '-')
+    name = re.sub(r'[^\w\s-]', '', name)
+    name = re.sub(r'\s+', ' ', name)
+    name = name.strip()
+    return name
+
+def scrape_finep_site(base_url, download_folder, start):
+    try:
+        while True:
+            page_url = f"{base_url}{start}"
+            print(f"Fetching page: {page_url}")
+            response = requests.get(page_url, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.content, 'html.parser')
+
+            post_links = soup.find_all('a', href=True)
+            for post_link in post_links:
+                if '/chamadas-publicas/chamadapublica/' in post_link['href']:
+                    post_url = f"http://www.finep.gov.br{post_link['href']}"
+                    post_title = post_link.get_text(strip=True)
+                    print(f"Processing: {post_title} - URL: {post_url}")
+
+                    post_response = requests.get(post_url, timeout=10)
+                    post_response.raise_for_status()
+                    post_soup = BeautifulSoup(post_response.content, 'html.parser')
+
+                    publication_date = extract_publication_date(post_soup)
+                    pdf_links = extract_pdf_links(post_soup)
+                    print(f"Found {len(pdf_links)} PDF links for {post_title}")
+
+                    if publication_date:
+                        sanitized_date = publication_date.replace('/', '-')
+
+                        # Use the name of the PDF file for the folder name
+                        if pdf_links:
+                            pdf_filename = pdf_links[0].split('/')[-1]
+                            pdf_name = os.path.splitext(pdf_filename)[0]
+                            pdf_name = pdf_name.replace('-', ' ')
+                            sanitized_title = sanitize_folder_name(pdf_name)
+                        else:
+                            sanitized_title = sanitize_folder_name(post_title)
+
+                        folder_name = f"{sanitized_title} - {sanitized_date}"
+                        local_folder = os.path.join(download_folder, folder_name)
+
+                        # Ensure the folder name is encoded in UTF-8
+                        local_folder = local_folder.encode('utf-8', errors='ignore').decode('utf-8')
+
+                        os.makedirs(local_folder, exist_ok=True)
+                        print(f"Created folder: {local_folder}")
+
+                        for pdf_url in pdf_links:
+                            if not pdf_url.startswith('http'):
+                                full_pdf_url = f"http://www.finep.gov.br{pdf_url}"
+                            else:
+                                full_pdf_url = pdf_url
+
+                            pdf_filename = pdf_url.split('/')[-1]
+                            local_path = os.path.join(local_folder, pdf_filename)
+
+                            if not file_exists_locally(local_path):
+                                print(f"Downloading {full_pdf_url} to {local_path}")
+                                download_file(full_pdf_url, local_path)
+                                print(f"Downloaded {local_path}")
+                            else:
+                                print(f"File {pdf_filename} already exists locally")
+                    else:
+                        print(f"Could not extract publication date for {post_title}")
+
+            # Increment start by 1 after processing the page
+            start = str(int(start) + 1)
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching {base_url}: {e}")
+
+def monitor_sites(folders):
+    while True:
+        for idx, (base_url, folder_name, scraper_function, start) in enumerate(folders, start=1):
+            download_folder = os.path.join(base_download_folder, folder_name)
+            os.makedirs(download_folder, exist_ok=True)
+            print(f"Starting scraping for page {idx}: {base_url}{start}")
+            scraper_function(base_url, download_folder, start)
+        time.sleep(60)
+
+# URLs para o scraping, com o número de página dinâmico
+site_scrapers = [
+    ('http://www.finep.gov.br/chamadas-publicas/chamadaspublicas?pchave=&situacao=&d1=&d2=&task=&boxchecked=0&filter_order=ordering&filter_order_Dir=asc&2462e9fe565798ce94b783db71fbb68f=1&start=', 'finep', scrape_finep_site, '0')
+]
+
+base_download_folder = '/content/drive/MyDrive/Engenharia de Software/teste/'
+os.makedirs(base_download_folder, exist_ok=True)
+
+monitor_sites(site_scrapers)
