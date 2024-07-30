@@ -1,0 +1,17 @@
+#!/bin/bash
+
+##################################################################
+#                                                                #
+#     Coloque esse script numa crontab, usando os seguintes      #
+#     passos.                                                    #
+#     crontab -e - Para abrir a crontab                          #
+#     digite */14400 sh start_bots.sh                            #
+#     :wq para salvar                                            #
+#                                                                #
+##################################################################
+
+#Inicializa os bot FINEP
+python Bot_UPE_FINEP.py
+
+#Inicializa o bot FACEPE
+python Bot_UPE_FACEPE.py
