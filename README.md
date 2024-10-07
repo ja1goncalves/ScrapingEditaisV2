@@ -62,7 +62,7 @@ crontab -e
 
 Adicione a seguinte linha para rodar os bots a cada 4 horas, Substituindo /caminho_para/ pelo caminho completo do arquivo **start.bots.sh** no seu computador.:
 ```command
-*/14400 * * * * sh /caminho_para/start.bots.sh
+*/14400 sh /caminho_para/start.bots.sh
 ```
 salve com :wq.
 
