@@ -1,6 +1,8 @@
 Projeto com início de desenvolvimento em Eng. de Software 2024.1 - Continuação do Desenvolvimento em Eng. de Software 2024.2
 
 Envolvidos(2024.1): Jean Araujo - DOUTORADO / RAFAEL ARAUJO - ESPECIAL / Felipe Pacheco - MESTRADO / Edjair Filho - MESTRADO / Arthur Miranda - GRADUAÇÃO / Mayanne Silva - GRADUAÇÃO / Maria Alves - GRADUAÇÃO
+
+
 Envolvidos(2024.2): Sérgio Paz de Lira - ESPECIAL / João Paulo Felix - ESPECIAL / Saulo Fernando Bernardo  - MESTRADO / Arthur Sobral de Macedo - GRADUAÇÃO / Pedro Henrique Bezerra de Mello - GRADUAÇÃO / Sergio Henrique de Andrade Lima Filho - GRADUAÇÃO / Tiago Gaspar de Moura - GRADUAÇÃO
 
 Ideias Iniciais: Projeto visa a construção de uma plataforma com editais de invocação, ou seja, Editais publicos/privados disponibilizados/em fase de resultado disponiveis por orgãos de fomento de pesquisa/ICTs (exemplo: FACEPE, CNPQ, SECTI, ....)
