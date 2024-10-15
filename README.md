@@ -32,7 +32,7 @@ start.bots.sh.txt: Um script Bash que automatiza a execução dos dois bots. É 
 Para rodar o projeto, é necessário se cumprir alguns requisitos:
 
 - **Python** instalado no seu sistema.
-- As bibliotecas necessárias para o Python. Você pode instalá-las usando os comandos: `pip install webdriver_manager` e `pip install unidecode`.
+- As bibliotecas necessárias para o Python. Você pode instalá-las usando os comandos: `pip install -r /path/to/requirements.txt`.
 
 Com esse processo feito, você pode agora executar os bots manualmente!
 

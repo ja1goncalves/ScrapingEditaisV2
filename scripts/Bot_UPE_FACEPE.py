@@ -5,9 +5,9 @@
 
 # In[2]:
 
-
-get_ipython().system('pip install webdriver_manager')
-get_ipython().system('pip install unidecode')
+# import IPython
+# IPython.get_ipython().system('pip install webdriver_manager')
+# IPython.get_ipython().system('pip install unidecode')
 import requests
 import time
 from bs4 import BeautifulSoup
